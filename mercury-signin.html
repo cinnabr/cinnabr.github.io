@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Cinnabar</title><link rel="stylesheet" href="lib/cinnabar.css"></head>
+<body>
+<!-- Mercury's sign-in and sign-up (setup and Settings). Only who signed in goes back to Mercury: never the password or tokens. -->
+<script src="lib/supabase.js"></script>
+<script src="lib/cinnabar.js"></script>
+<script>
+"use strict";
+CB_HOOKS.title = "Sign in to Mercury";
+if (/[?&]up\b/.test(location.search)) CB_HOOKS.initialMode = "up";
+cbAuthScreen("Mercury").then(u => {
+  const m = u.user_metadata || {};
+  window.webkit.messageHandlers.mercury.postMessage(JSON.stringify({ id: u.id, email: u.email || "", name: m.name || m.full_name || "" }));
+});
+</script>
+</body></html>
