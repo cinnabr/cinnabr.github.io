@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cinnabar</title>
+<link rel="icon" href="assets/mark.png">
+<link rel="stylesheet" href="lib/cinnabar.css">
+<link rel="stylesheet" href="drive.css">
+</head>
+<body>
+<div class="shell" id="shell" hidden>
+  <aside class="side">
+    <div class="brand" id="brand"></div>
+    <button class="btn primary new" id="new"><span class="plus"></span>New</button>
+    <nav id="nav">
+      <button data-view="home">Home</button>
+      <button data-view="drive">My Drive</button>
+      <button data-view="shared">Shared with me</button>
+      <button data-view="recent">Recent</button>
+      <button data-view="starred">Starred</button>
+      <button data-view="trash">Trash</button>
+    </nav>
+    <div class="apps">
+      <div class="cap">Apps</div>
+      <a href="docs.html" data-kind="doc">Cinnabar Docs</a>
+      <a href="sheets.html" data-kind="sheet">Cinnabar Sheets</a>
+      <a href="slides.html" data-kind="slides">Cinnabar Slides</a>
+      <div class="cap" style="margin-top:12px">Together</div>
+      <a href="classroom.html" data-icon="school">Classroom</a>
+      <a href="forums.html" data-icon="forum">Forums</a>
+      <a href="calendar.html" data-icon="calendar">Calendar</a>
+      <a href="forms.html" data-icon="task">Forms</a>
+      <a href="cesium.html" data-icon="cesium" hidden>Cesium</a>
+      <a href="games.html" data-icon="game">Games</a>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="bar">
+      <label class="search"><span id="sicon"></span><input id="q" type="search" placeholder="Search your Cinnabar" autocomplete="off" aria-label="Search files"></label>
+      <div class="grow"></div>
+      <button class="icon-btn" id="layout" title="Grid / list" aria-label="Toggle grid or list"></button>
+      <button class="avatar me" id="me"></button>
+    </header>
+    <section class="hero" id="hero">
+      <div class="greet" id="greet">good morning</div>
+      <div class="clock" id="clock" aria-live="off">0:00pm</div>
+      <div class="date" id="date"></div>
+    </section>
+    <section class="start" id="start">
+      <div class="cap">Start something new</div>
+      <div class="starts" id="starts"></div>
+    </section>
+    <section class="files">
+      <div class="crumbs" id="crumbs"></div>
+      <div id="list"></div>
+      <div class="empty" id="empty" hidden></div>
+    </section>
+  </main>
+</div>
+<script src="lib/supabase.js"></script>
+<script src="lib/cinnabar.js"></script>
+<script src="lib/qs.js"></script>
+<script src="hub.js"></script>
+<script src="drive.js"></script>
+</body>
+</html>
