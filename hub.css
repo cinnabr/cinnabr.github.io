@@ -11,7 +11,6 @@
 .hub-side .cap { margin-top: 14px; }
 .hub-main { overflow: auto; padding: 0 28px 60px; scroll-behavior: smooth; }
 .hub-main.full { display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; }
-.cesium-frame { flex: 1; width: calc(100% + 56px); margin: 0 -28px; border: 0; background: #000; animation: hubIn .35s cubic-bezier(.2,.8,.2,1) both; }
 .hub-bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px; height: 56px; margin: 0 -28px; padding: 0 28px; background: linear-gradient(rgba(6,5,5,.88), rgba(6,5,5,.6) 70%, transparent); }
 .hub-bar h1 { margin: 0; font: 600 19px var(--display); letter-spacing: .01em; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .hub-bar h1 .crumb { color: var(--muted); font-weight: 400; cursor: pointer; }
@@ -146,3 +145,71 @@ textarea.field { height: auto; min-height: 96px; padding: 10px 12px; resize: ver
 .player { position: fixed; inset: 0; z-index: 950; background: #000; display: flex; flex-direction: column; animation: cbfade .2s; }
 .player .pbar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; background: #0d0a09; border-bottom: 1px solid var(--line); }
 .player iframe { flex: 1; border: 0; width: 100%; background: #000; }
+
+/* ── nothing gets cut off ─────────────────────────────────────────────────── */
+.hub { grid-template-columns: 236px minmax(0, 1fr); }            /* minmax(0,…): wide tables scroll inside, they don't push the page off screen */
+.hub-side { overflow-x: hidden; }
+.hub-side a.cb-logo { height: auto; padding: 0; flex-wrap: wrap; gap: 6px; background: none !important; transform: none !important; box-shadow: none !important; }
+.hub-side .brand img.word { height: 26px; max-width: 100%; }
+.hub-side a span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-side .cb-logo .beta { margin-left: 0; overflow: visible; }
+.hub-bar { gap: 8px; }
+.hub-bar h1 { flex: 0 1 auto; overflow: hidden; }
+.hub-bar h1 > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-bar > div:last-of-type, .hub-bar .btn { flex: none; white-space: nowrap; }
+.tabs { max-width: 100%; flex-wrap: wrap; border-radius: 22px !important; overflow: visible; }
+.cbanner h2, .post b, .tile .body { overflow-wrap: anywhere; }
+.cbanner h2 { padding-right: 150px; }
+.cbanner .code { flex-direction: column; align-items: flex-end; gap: 0; font-size: 22px; letter-spacing: .18em; }
+.dialog { max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 860px) {   /* narrow window: the sidebar becomes a strip of icons along the top instead of vanishing */
+  .hub { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .hub-side { display: flex; flex-direction: row; align-items: center; height: auto; margin: 8px 8px 0; padding: 6px 8px; border-radius: 18px; overflow-x: auto; }
+  .hub-side .brand, .hub-side .cap, .hub-side a span { display: none; }
+  .hub-side a { flex: none; width: 40px; padding: 0; justify-content: center; }
+  .hub-main { padding: 0 14px 40px; } .hub-bar { margin: 0 -14px; padding: 0 14px; }
+  .cbanner h2 { font-size: 22px; padding-right: 110px; }
+}
+
+/* ── live activities ──────────────────────────────────────────────────────── */
+.live-dot { width: 9px; height: 9px; border-radius: 50%; background: #ff4d3a; box-shadow: 0 0 0 0 rgba(255, 77, 58, .7); animation: livePulse 1.6s infinite; flex: none; }
+@keyframes livePulse { to { box-shadow: 0 0 0 9px rgba(255, 77, 58, 0); } }
+.live-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding: 10px 14px; border-radius: 14px; background: rgba(226, 54, 31, .16); border: 1px solid rgba(255, 122, 82, .4); }
+.live-bar .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.live-chip { gap: 8px; max-width: 40vw; } .live-chip span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.live-chip .live-dot { background: #fff; }
+
+/* ── classwork rows, questions and the answer grid ────────────────────────── */
+.work { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; color: var(--text); border-left: 5px solid var(--k, var(--red)); }
+.work .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.work .who small { font: 700 10.5px var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--k); filter: brightness(1.5); }
+.work .who b { font-size: 15.5px; } .work .who span { font-size: 12.5px; }
+.work-prog { display: grid; grid-template-columns: auto auto; column-gap: 5px; align-items: baseline; width: 110px; flex: none; }
+.work-prog .fq-bar { grid-column: 1 / -1; margin-top: 4px; }
+.fq-bar { height: 6px; border-radius: 6px; background: rgba(255, 236, 228, .1); overflow: hidden; }
+.fq-bar i { display: block; height: 100%; width: 0; border-radius: 6px; transition: width .4s cubic-bezier(.2, .8, .2, 1); }
+.fq-nav { position: sticky; top: 60px; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 10px 14px; border-radius: 16px; background: var(--panel-solid, #1a1210); border: 1px solid var(--line2); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.fq-nav .fq-bar { grid-column: 1 / -1; }
+.fq-dots { display: flex; flex-wrap: wrap; gap: 6px; }
+.fq-dots button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line2); background: none; color: var(--muted); font-weight: 700; font-size: 12px; cursor: pointer; transition: all .2s; }
+.fq-dots button:hover { border-color: var(--text); color: var(--text); }
+.fq-dots button.done { background: #2f8f55; border-color: #2f8f55; color: #fff; }
+.fq { display: flex; gap: 14px; align-items: flex-start; padding: 18px; scroll-margin-top: 140px; }
+.fq-n { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; color: #fff; font: 700 15px var(--display); }
+.fq-main { flex: 1; min-width: 0; }
+.fq-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.fq-head b { font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; } .fq-head .chip { flex: none; }
+.fq-body { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.fq-opt { position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 14px; border-radius: 12px; border: 1.5px solid var(--line2); cursor: pointer; overflow-wrap: anywhere; transition: border-color .15s, background .15s, transform .15s; }
+.fq-opt:hover { border-color: rgba(255, 236, 228, .45); transform: translateX(2px); }
+.fq-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.fq-l { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; border: 1.5px solid var(--line2); font-weight: 700; font-size: 12.5px; color: var(--muted); }
+.fq-opt:has(input:checked) { border-color: #ff7a52; background: rgba(226, 54, 31, .16); }
+.fq-opt:has(input:checked) .fq-l { background: var(--red); border-color: var(--red); color: #fff; }
+.fq-opt:has(input:focus-visible) { outline: 2px solid var(--orange); outline-offset: 2px; }
+.fq-grid td, .fq-grid th { padding: 6px 8px; }
+.fq-cell { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; font-weight: 700; background: rgba(255, 236, 228, .08); color: var(--muted); }
+.fq-cell.right { background: #2f8f55; color: #fff; } .fq-cell.wrong { background: #c0392b; color: #fff; } .fq-cell.none { background: none; border: 1px dashed var(--line2); }
+@media (max-width: 560px) { .fq { padding: 14px; gap: 10px; } .work-prog { display: none; } }
+.gradebook th { white-space: normal; max-width: 170px; min-width: 70px; overflow: visible; line-height: 1.25; vertical-align: bottom; }
+.person span { max-width: 100%; }

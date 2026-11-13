@@ -12,7 +12,7 @@ async function render() {
   const r = route(); UI.actions.innerHTML = "";
   try {
     if (r.edit) return await renderEditor(r.edit, r.tab || "questions");
-    if (r.f) return await renderAnswer(r.f);
+    if (r.f) return await renderAnswer(r.f, r);
     return await renderHome();
   } catch (e) { hubErr(/fm_|schema cache/.test(e.message) ? new Error("Forms aren't set up on this Cinnabar server yet (db/forms.sql).") : e); }
 }
@@ -45,11 +45,11 @@ async function renderEditor(id, tab) {
   let saveT, dirty = false;
   const status = cbEl("span", { class: "muted", style: { fontSize: "12px" }, text: "Saved" });
   const save = (now) => { dirty = true; status.textContent = "Saving…"; clearTimeout(saveT); saveT = setTimeout(async () => {
-    try { await q(sb.from("fm_forms").update({ title: f.title, description: f.description, questions: f.questions, quiz: f.quiz, accepting: f.accepting, show_score: f.show_score, one_response: f.one_response, class_id: f.class_id, color: f.color }).eq("id", f.id)); dirty = false; status.textContent = "Saved"; }
+    try { await q(sb.from("fm_forms").update({ title: f.title, description: f.description, questions: f.questions, quiz: f.quiz, accepting: f.accepting, show_score: f.show_score, one_response: f.one_response, class_id: f.class_id, color: f.color, test_mode: f.test_mode }).eq("id", f.id)); dirty = false; status.textContent = "Saved"; }
     catch (e) { status.textContent = "Not saved"; hubErr(e); } }, now ? 0 : 600); };
   addEventListener("beforeunload", e => { if (dirty) e.preventDefault(); });
   UI.actions.append(status,
-    cbEl("button", { class: "btn", onclick: () => go({ f: f.id }) }, cbIconEl("open"), cbEl("span", { text: "Preview" })),
+    cbEl("button", { class: "btn", onclick: () => { save(true); go({ f: f.id, preview: 1 }); } }, cbIconEl("open"), cbEl("span", { text: "Preview" })),
     cbEl("button", { class: "btn primary", onclick: async () => { await navigator.clipboard.writeText(link(f.id)).catch(() => 0); cbToast("Link copied. Anyone signed in to Cinnabar can answer" + (f.class_id ? " (in that class)." : ".")); } }, cbIconEl("link"), cbEl("span", { text: "Copy link" })));
   const v = UI.view = hubView(UI.view);
   const tabs = cbEl("div", { class: "tabs" });
@@ -77,12 +77,13 @@ function qCard(f, x, i, save, draw) {
   const kind = cbEl("select", { class: "field", style: { width: "170px" } }); for (const [k, [n]] of Object.entries(KINDS)) kind.append(cbEl("option", { value: k, text: n })); kind.value = x.kind;
   kind.onchange = () => { x.kind = kind.value; if ((x.kind === "choice" || x.kind === "checks") && !x.options?.length) x.options = ["Option 1"]; delete x.answer; save(); draw(); };
   card.append(cbEl("div", { style: { display: "flex", gap: "8px" } }, text, kind));
+  if (f.quiz && x.kind !== "long" && (x.answer == null || (Array.isArray(x.answer) && !x.answer.length))) card.append(cbEl("div", { class: "chip amber", style: { marginTop: "8px" }, text: x.kind === "short" ? "Type the correct answer below" : x.kind === "scale" ? "Pick the correct number below" : "Mark the correct answer" }));
   if (x.kind === "choice" || x.kind === "checks") {
     const opts = cbEl("div", { class: "stack", style: { gap: "6px", marginTop: "10px" } });
     x.options.forEach((o, j) => {
       const correct = f.quiz && (x.kind === "choice" ? x.answer === o : (x.answer || []).includes(o));
-      const mark = cbEl("button", { class: "icon-btn" + (correct ? " on" : ""), title: f.quiz ? "Mark as a correct answer" : "", html: cbIcon(x.kind === "choice" ? "check" : "task"), disabled: !f.quiz,
-        onclick: () => { if (x.kind === "choice") x.answer = x.answer === o ? undefined : o; else { const s = new Set(x.answer || []); s.has(o) ? s.delete(o) : s.add(o); x.answer = [...s]; } save(); draw(); } });
+      const mark = cbEl("button", { class: "key-mark" + (correct ? " on" : ""), title: correct ? "Correct answer (click to unmark)" : "Mark as the correct answer", html: cbIcon("check") + `<span>${correct ? "Correct" : "Mark correct"}</span>`,
+        onclick: () => { if (!f.quiz) { f.quiz = true; cbToast("Turned this into a quiz"); } if (x.kind === "choice") x.answer = x.answer === o ? undefined : o; else { const s = new Set(x.answer || []); s.has(o) ? s.delete(o) : s.add(o); x.answer = [...s]; } save(); draw(); } });
       const inp = cbEl("input", { class: "field", value: o, style: { height: "32px" } });
       inp.onchange = () => { const old = x.options[j]; x.options[j] = inp.value || `Option ${j + 1}`; if (x.answer === old) x.answer = x.options[j]; if (Array.isArray(x.answer)) x.answer = x.answer.map(a => a === old ? x.options[j] : a); save(); };
       opts.append(cbEl("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, mark, inp, cbEl("button", { class: "icon-btn", title: "Remove option", html: cbIcon("close"), onclick: () => { x.options.splice(j, 1); save(); draw(); } })));
@@ -111,7 +112,15 @@ async function settings(f, body, save) {
   const toggle = (key, label, sub) => cbEl("label", { class: "post", style: { display: "flex", gap: "12px", alignItems: "center", cursor: "pointer" } },
     cbEl("input", { type: "checkbox", checked: !!f[key], style: { width: "20px", height: "20px" }, onchange: e => { f[key] = e.target.checked; save(true); } }), cbEl("div", {}, cbEl("b", { text: label }), cbEl("div", { class: "muted", text: sub })));
   body.append(toggle("quiz", "Make this a quiz", "Mark correct answers and give points. Scores are worked out on the server."), toggle("accepting", "Accepting responses", "Turn off to close the form."),
-    toggle("show_score", "Show people their score", "Right after they submit."), toggle("one_response", "One response per person", "People must be signed in to Cinnabar."));
+    toggle("show_score", "Show students their score", "Right after they hand it in."));
+  body.append(cbEl("label", { class: "post", style: { display: "flex", gap: "12px", alignItems: "center", cursor: "pointer" } },
+    cbEl("input", { type: "checkbox", checked: !f.one_response, style: { width: "20px", height: "20px" }, onchange: e => { f.one_response = !e.target.checked; save(true); } }),
+    cbEl("div", {}, cbEl("b", { text: "Allow retakes" }), cbEl("div", { class: "muted", text: "Students can answer again. In Classroom, their best score counts." }))));
+  const tm = cbEl("div", { class: "seg" });
+  for (const [k, n, d] of [["off", "Off", "A normal form"], ["fullscreen", "Full screen", "Opens full screen. Leaving it is blocked on screen and counted for you."], ["lockdown", "Mercury Lockdown", "Only in Quicksilver: full screen, no other tabs, shortcuts or closing until it's handed in."]])
+    tm.append(cbEl("button", { class: (f.test_mode || "off") === k ? "on" : "", title: d, onclick: e => { f.test_mode = k; [...tm.children].forEach(b => b.classList.remove("on")); e.currentTarget.classList.add("on"); tmd.textContent = d; save(true); } }, cbEl("span", { text: n })));
+  const tmd = cbEl("div", { class: "muted", style: { marginTop: "8px" }, text: { off: "A normal form", fullscreen: "Opens full screen. Leaving it is blocked on screen and counted for you.", lockdown: "Only in Quicksilver: full screen, no other tabs, shortcuts or closing until it's handed in." }[f.test_mode || "off"] });
+  body.append(cbEl("div", { class: "post" }, cbEl("b", { text: "Test mode" }), cbEl("div", { style: { marginTop: "10px" } }, tm), tmd));
   const who = cbEl("select", { class: "field" }, cbEl("option", { value: "", text: "Anyone signed in to Cinnabar with the link" }), ...cs.map(c => cbEl("option", { value: c.id, text: "Only " + c.name })));
   who.value = f.class_id || ""; who.onchange = () => { f.class_id = who.value || null; save(true); };
   const col = cbEl("select", { class: "field" }, ...HUB_COLORS.map(c => cbEl("option", { value: c, text: c }))); col.value = f.color; col.onchange = () => { f.color = col.value; save(true); };
@@ -149,62 +158,128 @@ async function responses(f, body) {
     } else for (const a of vals.slice(0, 50)) card.append(cbEl("div", { class: "txt", style: { padding: "6px 10px", borderRadius: "8px", background: "rgba(255,236,228,.04)", marginTop: "4px" }, text: String(a) }));
     body.append(card);
   }
-  const people = cbEl("div", { class: "gradebook" }); const tb = cbEl("table");
-  tb.append(cbEl("thead", {}, cbEl("tr", {}, cbEl("th", { text: "Person" }), cbEl("th", { text: "When" }), f.quiz ? cbEl("th", { text: "Score" }) : null)));
-  const tbody = cbEl("tbody"); for (const r of rows) tbody.append(cbEl("tr", {}, cbEl("td", { text: hubWho(r.respondent) }), cbEl("td", { text: hubWhen(r.created_at) }), f.quiz ? cbEl("td", { text: r.max_score ? `${r.score}/${r.max_score}` : "—" }) : null));
-  tb.append(tbody); people.append(tb); body.append(people);
+  const people = cbEl("div", { class: "gradebook fq-grid" }); const tb = cbEl("table");
+  tb.append(cbEl("thead", {}, cbEl("tr", {}, cbEl("th", { text: "Person" }), ...f.questions.map((x, i) => cbEl("th", { text: i + 1, title: x.text || "" })), f.quiz ? cbEl("th", { text: "Score" }) : null, cbEl("th", { text: "When" }), f.test_mode !== "off" ? cbEl("th", { text: "Left the test" }) : null)));
+  const tbody = cbEl("tbody");
+  for (const r of rows) tbody.append(cbEl("tr", {}, cbEl("td", { text: hubWho(r.respondent) }),
+    ...f.questions.map(x => { const a = [].concat(r.answers[x.id] ?? "").join("; "), m = markLocal({ ...f, questions: [x] }, r.answers);   // green right, red wrong, plain when there's no key
+      return cbEl("td", {}, cbEl("span", { class: "fq-cell " + (!a ? "none" : !m.max_score ? "" : m.score ? "right" : "wrong"), title: a || "No answer", text: !a ? "–" : !m.max_score ? "•" : m.score ? "✓" : "✕" })); }),
+    f.quiz ? cbEl("td", {}, cbEl("b", { text: r.max_score ? `${r.score}/${r.max_score}` : "—" })) : null, cbEl("td", { class: "muted", text: hubWhen(r.created_at) }), f.test_mode !== "off" ? cbEl("td", { text: r.left_count ? r.left_count + "×" : "Never", style: { color: r.left_count ? "#ff8b78" : "" } }) : null));
+  tb.append(tbody); people.append(tb); body.append(cbEl("h3", { text: "Everyone's answers", style: { margin: "8px 0 0", font: "600 15px var(--display)" } }), people);
   body.append(cbEl("button", { class: "btn", style: { alignSelf: "flex-start" }, onclick: () => {
-    const head = ["Person", "Email", "When", ...(f.quiz ? ["Score"] : []), ...f.questions.map(x => x.text)];
-    const lines = [head, ...rows.map(r => [hubWho(r.respondent), HUB_PEOPLE[r.respondent]?.email || "", r.created_at, ...(f.quiz ? [r.max_score ? `${r.score}/${r.max_score}` : ""] : []), ...f.questions.map(x => [].concat(r.answers[x.id] ?? "").join("; "))])];
+    const head = ["Person", "Username", "When", ...(f.quiz ? ["Score"] : []), ...f.questions.map(x => x.text)];
+    const lines = [head, ...rows.map(r => [hubWho(r.respondent), cbUname(HUB_PEOPLE[r.respondent]?.email), r.created_at, ...(f.quiz ? [r.max_score ? `${r.score}/${r.max_score}` : ""] : []), ...f.questions.map(x => [].concat(r.answers[x.id] ?? "").join("; "))])];
     cbDownload(cbSafeName(f.title) + " responses.csv", lines.map(l => l.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n"), "text/csv");
   } }, cbIconEl("download"), cbEl("span", { text: "Download responses (CSV)" })));
 }
 
 /* ── answering ── */
-async function renderAnswer(id) {
-  const f = await q(sb.rpc("fm_open", { p_form: id }));
-  UI.title.textContent = f.title;
-  if (f.owner === CB_USER.id) UI.actions.append(cbEl("button", { class: "btn", text: "Edit", onclick: () => go({ edit: f.id }) }));
-  const v = UI.view = hubView(UI.view);
-  const body = cbEl("div", { class: "stack anim", style: { maxWidth: "720px", margin: "0 auto" } }); v.append(body);
-  body.append(cbEl("div", { class: "post", style: { borderTop: `8px solid ${f.color}` } }, cbEl("h2", { text: f.title, style: { margin: "0 0 6px", font: "700 26px var(--display)" } }), f.description ? cbEl("div", { class: "txt", text: f.description }) : null,
-    cbEl("div", { class: "muted", style: { fontSize: "12px", marginTop: "8px" }, text: `Answering as ${CB_USER.email}` + (f.questions.some(x => x.required) ? " · * required" : "") })));
-  if (f.mine && f.one_response) return body.append(thanks(f, f.mine));
-  if (!f.accepting) return body.append(cbEl("div", { class: "post", text: "This form isn't accepting responses any more." }));
-  const ans = {};
+// marks a preview in the browser, the same way db/forms.sql fm_mark does on the server
+function markLocal(f, ans) {
+  let got = 0, total = 0;
   for (const x of f.questions) {
-    const card = cbEl("div", { class: "post" }, cbEl("b", { text: (x.text || "Question") + (x.required ? " *" : "") }), f.quiz && x.points ? cbEl("span", { class: "chip", style: { marginLeft: "8px" }, text: x.points + " pt" + (x.points === 1 ? "" : "s") }) : null);
-    const box = cbEl("div", { class: "stack", style: { gap: "6px", marginTop: "10px" } }); card.append(box);
-    if (x.kind === "choice" || x.kind === "checks") for (const o of x.options) {
-      const inp = cbEl("input", { type: x.kind === "choice" ? "radio" : "checkbox", name: x.id, value: o, style: { width: "18px", height: "18px" } });
-      inp.onchange = () => { ans[x.id] = x.kind === "choice" ? o : [...box.querySelectorAll("input:checked")].map(i => i.value); };
-      box.append(cbEl("label", { style: { display: "flex", gap: "10px", alignItems: "center", cursor: "pointer", padding: "6px 8px", borderRadius: "8px" } }, inp, cbEl("span", { text: o })));
-    } else if (x.kind === "scale") {
+    if (!f.quiz || x.answer == null || x.kind === "long") continue;
+    const pts = Number(x.points ?? 1); total += pts; const a = ans[x.id];
+    const right = x.kind === "checks" ? Array.isArray(a) && a.length === x.answer.length && x.answer.every(o => a.includes(o))
+      : x.kind === "short" ? String(x.answer).split("|").some(o => o.trim().toLowerCase().replace(/\s+/g, " ") === String(a ?? "").trim().toLowerCase().replace(/\s+/g, " "))
+      : String(a ?? "") === String(x.answer);
+    if (right) got += pts;
+  }
+  return { score: got, max_score: total };
+}
+async function renderAnswer(id, r = {}) {
+  const preview = !!r.preview;
+  let f;
+  if (preview) { const full = await q(sb.from("fm_forms").select("*").eq("id", id).single()); f = { ...full, mine: null, attempts: 0 }; }   // the owner previews with the answer key, nothing is saved
+  else f = await q(sb.rpc("fm_open", { p_form: id }));
+  const post = r.post, back = cbSameSite(r.back || "");
+  UI.title.textContent = f.title + (preview ? " (preview)" : "");
+  if (f.owner === CB_USER.id) UI.actions.append(cbEl("button", { class: "btn", text: preview ? "Back to editing" : "Edit", onclick: () => go({ edit: f.id }) }));
+  const v = UI.view = hubView(UI.view);
+  const body = cbEl("div", { class: "stack anim", style: { maxWidth: "760px", margin: "0 auto" } }); v.append(body);
+  const head = () => cbEl("div", { class: "post glassy", style: { borderTop: `8px solid ${f.color}` } }, cbEl("h2", { text: f.title, style: { margin: "0 0 6px", font: "700 26px var(--display)" } }), f.description ? cbEl("div", { class: "txt", text: f.description }) : null,
+    cbEl("div", { class: "muted", style: { fontSize: "12px", marginTop: "8px" }, text: (preview ? "Preview: answers aren't saved, try it as many times as you like" : `Answering as ${cbName()}`) + (f.questions.some(x => x.required) ? " · * required" : "") }));
+  body.append(head());
+  if (!preview && f.mine && f.one_response) return body.append(thanks(f, f.mine, { post, back }));
+  if (!preview && !f.accepting) return body.append(cbEl("div", { class: "post", text: "This form isn't accepting responses any more." }));
+  const mode = f.test_mode || "off";
+  if (mode !== "off") {   // a test: explain, then start it full screen (or in Mercury Lockdown)
+    const qs = !!window.webkit?.messageHandlers?.qsCinnabar;
+    const start = cbEl("button", { class: "btn primary", style: { height: "42px", padding: "0 26px" }, text: "Start the test" });
+    const card = cbEl("div", { class: "post", style: { textAlign: "center", padding: "30px" } }, cbEl("b", { text: mode === "lockdown" ? "This test runs in Mercury Lockdown" : "This test runs in full screen", style: { fontSize: "18px" } }),
+      cbEl("p", { class: "muted", text: mode === "lockdown" ? "Quicksilver goes full screen and other tabs, shortcuts and closing are switched off until you hand it in. Leaving the window is counted for your teacher." : "Leaving full screen or switching away is blocked on screen and counted for your teacher." }), start);
+    if (mode === "lockdown" && !qs && !preview) { card.append(cbEl("p", { style: { color: "#ff8b78" }, text: "Open this test in Quicksilver on Mercury to take it." })); start.disabled = true; }
+    body.append(card);
+    await new Promise(res => start.onclick = res);
+    card.remove();
+  }
+  let left = 0, live = mode !== "off";
+  const guard = cbEl("div", { class: "test-guard", hidden: true }, cbEl("div", { class: "post", style: { textAlign: "center", padding: "30px", maxWidth: "420px" } }, cbEl("b", { text: "You left the test", style: { fontSize: "20px" } }), cbEl("p", { class: "muted", text: "Your teacher can see how often this happened." }),
+    cbEl("button", { class: "btn primary", text: "Go back to the test", onclick: () => { document.documentElement.requestFullscreen?.().catch(() => 0); guard.hidden = true; } })));
+  const leftIt = () => { if (!live) return; left++; guard.hidden = false; };
+  const onFs = () => { if (!document.fullscreenElement) leftIt(); };
+  const onVis = () => { if (document.hidden) leftIt(); };
+  const stop = () => { live = false; removeEventListener("blur", leftIt); document.removeEventListener("fullscreenchange", onFs); document.removeEventListener("visibilitychange", onVis); document.fullscreenElement && document.exitFullscreen?.().catch(() => 0); try { window.webkit?.messageHandlers?.qsCinnabar?.postMessage(JSON.stringify({ lockdown: false })); } catch { } guard.remove(); };
+  if (live) {
+    document.body.append(guard);
+    if (mode === "lockdown") try { window.webkit?.messageHandlers?.qsCinnabar?.postMessage(JSON.stringify({ lockdown: true })); } catch { }
+    document.documentElement.requestFullscreen?.().catch(() => 0);   // never await: some engines leave the promise pending, which hid the questions
+    addEventListener("blur", leftIt); document.addEventListener("fullscreenchange", onFs); document.addEventListener("visibilitychange", onVis);
+  }
+  const ans = {}, has = x => !(ans[x.id] == null || ans[x.id] === "" || (Array.isArray(ans[x.id]) && !ans[x.id].length));
+  // the strip that follows you down the page: one bubble per question, filled once it's answered
+  const dots = cbEl("div", { class: "fq-dots" }), count = cbEl("span", { class: "muted" }), bar = cbEl("div", { class: "fq-bar" }, cbEl("i", { style: { background: f.color } }));
+  const mark = () => { const n = f.questions.filter(has).length; f.questions.forEach((x, i) => dots.children[i].classList.toggle("done", has(x))); count.textContent = `${n} of ${f.questions.length} answered`; bar.firstChild.style.width = (f.questions.length ? n / f.questions.length * 100 : 0) + "%"; };
+  if (f.questions.length) body.append(cbEl("div", { class: "fq-nav" }, dots, count, bar));
+  f.questions.forEach((x, i) => {
+    dots.append(cbEl("button", { type: "button", text: i + 1, title: x.text || "Question " + (i + 1), onclick: () => body.querySelector(`[data-q="${i}"]`).scrollIntoView({ behavior: "smooth", block: "center" }) }));
+    const box = cbEl("div", { class: "fq-body" });
+    const card = cbEl("div", { class: "post fq", "data-q": i }, cbEl("div", { class: "fq-n", text: i + 1, style: { background: f.color } }),
+      cbEl("div", { class: "fq-main" }, cbEl("div", { class: "fq-head" }, cbEl("b", { text: (x.text || "Question") + (x.required ? " *" : "") }), f.quiz && x.points ? cbEl("span", { class: "chip", text: x.points + " pt" + (x.points === 1 ? "" : "s") }) : null),
+        x.kind === "checks" ? cbEl("div", { class: "muted", style: { fontSize: "12px" }, text: "Choose all that apply" }) : null, box));
+    if (x.kind === "choice" || x.kind === "checks") x.options.forEach((o, k) => {
+      const inp = cbEl("input", { type: x.kind === "choice" ? "radio" : "checkbox", name: x.id, value: o });
+      inp.onchange = () => { ans[x.id] = x.kind === "choice" ? o : [...box.querySelectorAll("input:checked")].map(n => n.value); mark(); };
+      box.append(cbEl("label", { class: "fq-opt" }, inp, cbEl("span", { class: "fq-l", text: String.fromCharCode(65 + k % 26) }), cbEl("span", { text: o })));
+    });
+    else if (x.kind === "scale") {
       const row = cbEl("div", { class: "att" });
-      for (const n of [1, 2, 3, 4, 5]) row.append(cbEl("button", { text: n, style: { width: "42px", height: "42px", fontSize: "15px" }, onclick: e => { ans[x.id] = String(n); [...row.children].forEach(b => b.classList.remove("on", "present")); e.currentTarget.classList.add("on", "present"); } }));
+      for (const n of [1, 2, 3, 4, 5]) row.append(cbEl("button", { text: n, style: { width: "46px", height: "46px", fontSize: "15px" }, onclick: e => { ans[x.id] = String(n); [...row.children].forEach(b => b.classList.remove("on", "present")); e.currentTarget.classList.add("on", "present"); mark(); } }));
       box.append(row);
     } else {
-      const inp = x.kind === "long" ? cbEl("textarea", { class: "field", rows: 4 }) : cbEl("input", { class: "field", placeholder: "Your answer" });
-      inp.oninput = () => { ans[x.id] = inp.value; }; box.append(inp);
+      const inp = x.kind === "long" ? cbEl("textarea", { class: "field", rows: 4, placeholder: "Write your answer" }) : cbEl("input", { class: "field", placeholder: "Your answer" });
+      inp.oninput = () => { ans[x.id] = inp.value; mark(); }; box.append(inp);
     }
     body.append(card);
-  }
-  const send = cbEl("button", { class: "btn primary", style: { alignSelf: "flex-start", height: "40px", padding: "0 24px" }, text: "Submit" });
+  });
+  mark();
+  const send = cbEl("button", { class: "btn primary", style: { alignSelf: "flex-start", height: "40px", padding: "0 24px" }, text: mode === "off" ? "Submit" : "Hand in" });
   send.onclick = async () => {
     const missing = f.questions.find(x => x.required && (ans[x.id] == null || ans[x.id] === "" || (Array.isArray(ans[x.id]) && !ans[x.id].length)));
     if (missing) return cbToast("Please answer: " + (missing.text || "a required question"));
     send.disabled = true;
     try {
-      await q(sb.from("fm_responses").insert({ form_id: f.id, answers: ans }));   // no .select(): the score comes back through fm_open
+      if (preview) { stop(); body.innerHTML = ""; body.append(head(), thanks(f, { ...markLocal(f, ans), created_at: new Date().toISOString() }, { preview: true, again: () => render() })); return; }
+      await q(sb.from("fm_responses").insert({ form_id: f.id, answers: ans, left_count: left }));   // no .select(): the score comes back through fm_open
+      stop();
       const again = await q(sb.rpc("fm_open", { p_form: f.id }));
-      body.innerHTML = ""; body.append(thanks(again, again.mine || { answers: ans }));
+      let sent = null;
+      if (post) sent = await sb.rpc("cr_auto_score", { p_post: post });
+      body.innerHTML = ""; body.append(head(), thanks(again, again.mine || { answers: ans }, { post, back, sent, again: again.one_response ? null : () => render() }));
     } catch (e) { hubErr(e); send.disabled = false; }
   };
   body.append(send);
 }
-function thanks(f, mine) {
-  const c = cbEl("div", { class: "post", style: { textAlign: "center", padding: "40px 20px" } }, cbEl("div", { class: "empty-art", style: { padding: "0" } }, cbEl("div", { class: "ring", html: cbIcon("check") }), cbEl("b", { text: "Your response was recorded" }), cbEl("div", { text: "Submitted " + hubWhen(mine.created_at || new Date().toISOString()) })));
-  if (mine.max_score) c.append(cbEl("div", { text: `${mine.score} / ${mine.max_score}`, style: { font: "800 48px var(--display)", color: f.color, marginTop: "14px" } }));
+function thanks(f, mine, o = {}) {
+  const c = cbEl("div", { class: "post", style: { textAlign: "center", padding: "40px 20px" } }, cbEl("div", { class: "empty-art", style: { padding: "0" } }, cbEl("div", { class: "ring", html: cbIcon("check") }),
+    cbEl("b", { text: o.preview ? "Preview finished" : "Your response was recorded" }), cbEl("div", { text: "Submitted " + hubWhen(mine.created_at || new Date().toISOString()) })));
+  if (mine.max_score) c.append(cbEl("div", { text: `${mine.score} / ${mine.max_score}`, style: { font: "800 48px var(--display)", color: f.color, marginTop: "14px" } }), cbEl("div", { class: "muted", text: Math.round(mine.score / mine.max_score * 100) + "%" }));
+  else if (f.quiz && f.show_score === false && !o.preview) c.append(cbEl("div", { class: "muted", style: { marginTop: "10px" }, text: "Your teacher will share your score." }));
+  if (o.sent) c.append(cbEl("div", { class: "muted", style: { marginTop: "10px" }, text: o.sent.error ? "Couldn't send it to your class: " + o.sent.error.message : `Sent to your class: ${o.sent.data} points` }));
+  const row = cbEl("div", { style: { display: "flex", gap: "10px", justifyContent: "center", marginTop: "18px" } });
+  if (o.again) row.append(cbEl("button", { class: "btn primary", text: o.preview ? "Try the preview again" : "Take it again", onclick: o.again }));
+  if (o.back) row.append(cbEl("a", { class: "btn", href: o.back, text: "Back to class" }));
+  if (row.children.length) c.append(row);
   return c;
 }
 

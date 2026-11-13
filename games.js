@@ -1,9 +1,7 @@
-/* Cinnabar Games: Cesium (cesium.html), small built-in games, and any web game you add by link. */
+/* Cinnabar Games: small built-in games, and any web game you add by link. */
 "use strict";
 let UI;
-const BUNDLED = [
-  { id: "cesium", name: "Cesium", by: "Classroom game platform", href: "cesium.html", color: "#2f7fd8", letter: "Cs", text: "Classes, live quiz games, a coin shop and a gradebook. For school accounts." },
-];
+const BUNDLED = [];
 const BUILTIN = [
   { id: "blitz", name: "Math Blitz", by: "Built in", color: "#e2361f", letter: "±", text: "60 seconds. How many sums can you get right?", run: mathBlitz },
   { id: "snake", name: "Ember Snake", by: "Built in", color: "#ff7a1a", letter: "~", text: "Arrow keys or WASD. Eat embers, don't bite yourself.", run: emberSnake },
@@ -78,10 +76,19 @@ function mathBlitz(stage, g) {
   stage.append(cbEl("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "18px" } }, qEl, inp, info));
   next(); show(); setTimeout(() => inp.focus(), 50);
 }
+let ASSIGNED = null;   // { post, back } when a teacher assigned this game in Classroom
 function over(score, top, again) {
+  const res = cbEl("div", { class: "muted", style: { fontSize: "15px", minHeight: "20px" } });
+  if (ASSIGNED) sb.rpc("cr_auto_score", { p_post: ASSIGNED.post, p_score: score }).then(({ data, error }) => {
+    res.textContent = error ? "Couldn't send your score: " + error.message : `Sent to your class: ${data} points`;
+  });
+  return overCard(score, top, again, res);
+}
+function overCard(score, top, again, res) {
   return cbEl("div", { class: "anim", style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" } },
     cbEl("div", { text: "Game over", style: { font: "700 40px var(--display)" } }), cbEl("div", { text: `Score ${score} · Best ${top}`, style: { fontSize: "20px" } }),
-    cbEl("button", { class: "btn primary", text: "Play again", onclick: again }));
+    res, cbEl("div", { style: { display: "flex", gap: "10px", justifyContent: "center" } }, cbEl("button", { class: "btn primary", text: "Play again", onclick: again }),
+      ASSIGNED?.back ? cbEl("a", { class: "btn", href: ASSIGNED.back, text: "Back to class" }) : null));
 }
 
 /* ── Ember Snake ── */
@@ -130,4 +137,10 @@ function typeSprint(stage, g) {
   next(); info.textContent = `Words 0 · ${left}s`; setTimeout(() => inp.focus(), 50);
 }
 
-(async () => { UI = await hubBoot("Games"); render(); })();
+(async () => {
+  UI = await hubBoot("Games"); render();
+  const h = new URLSearchParams(location.hash.slice(1)), g = BUILTIN.find(x => x.id === h.get("play"));
+  if (!g) return;
+  const back = h.get("back"); ASSIGNED = h.get("post") ? { post: h.get("post"), back: cbSameSite(back) } : null;
+  play(g);
+})();

@@ -87,7 +87,7 @@ async function load() {
   render();
 }
 
-function ownerLabel(f) { return f.owner === CB_USER.id ? "me" : (people[f.owner]?.display_name || people[f.owner]?.email || "someone"); }
+function ownerLabel(f) { return f.owner === CB_USER.id ? "me" : (people[f.owner]?.display_name || cbUname(people[f.owner]?.email) || "someone"); }
 function open(f) {
   if (f.trashed) return cbToast("Restore this file from Trash to open it");
   if (f.kind === "folder") return f.owner === CB_USER.id ? setView("drive", f.id, f.title) : cbToast("Open shared folders from the owner's link");
@@ -151,7 +151,7 @@ function render() {
 (async function main() {
   cbWave();
   await cbRequireAuth("Drive");
-  hubEdu().then(edu => { const c = $(".apps a[href='cesium.html']"); if (c) c.hidden = !edu; });
+  sb.from("profiles").select("kind").eq("id", CB_USER.id).maybeSingle().then(r => { if (r.data?.kind === "work") document.querySelectorAll('a[href="classroom.html"], a[href="games.html"]').forEach(a => a.remove()); }, () => 0);   // work accounts have no Classroom
   $("#shell").hidden = false;
   $("#brand").append(cbLogo());
   $("#new .plus").innerHTML = cbIcon("plus");
@@ -165,8 +165,8 @@ function render() {
   setLayoutIcon();
   lb.onclick = () => { layout = layout === "grid" ? "list" : "grid"; localStorage.setItem("cb-layout", layout); setLayoutIcon(); render(); };
   const me = $("#me");
-  me.textContent = cbName()[0]; me.title = CB_USER.email; me.style.background = cbColorFor(CB_USER.email);
-  me.onclick = e => cbMenuAt(e.currentTarget, [{ label: CB_USER.email, icon: "shared", run() {} }, "-", { label: "Sign out", icon: "logout", run: cbSignOut }]);
+  me.textContent = cbName()[0]; me.title = cbUname(CB_USER.email); me.style.background = cbColorFor(CB_USER.email);
+  me.onclick = e => cbMenuAt(e.currentTarget, [{ label: cbUname(CB_USER.email), icon: "shared", run() {} }, "-", { label: "Sign out", icon: "logout", run: cbSignOut }]);
   const starts = $("#starts");
   for (const t of TEMPLATES) {
     const b = cbEl("button", { class: "tpl", onclick: () => openNew(t.kind, t) });

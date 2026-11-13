@@ -10,7 +10,7 @@ CB_HOOKS.title = "Sign in to Mercury";
 if (/[?&]up\b/.test(location.search)) CB_HOOKS.initialMode = "up";
 cbAuthScreen("Mercury").then(u => {
   const m = u.user_metadata || {};
-  window.webkit.messageHandlers.mercury.postMessage(JSON.stringify({ id: u.id, email: u.email || "", name: m.name || m.full_name || "" }));
+  window.webkit.messageHandlers.mercury.postMessage(JSON.stringify({ id: u.id, username: cbUname(u.email), name: m.name || m.full_name || "" }));
 });
 </script>
 </body></html>
