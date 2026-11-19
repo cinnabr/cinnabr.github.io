@@ -1,7 +1,8 @@
-/* Cinnabar Games: small built-in games, and any web game you add by link. */
+/* Cinnabar Games: class games (play.html), small built-in games, and any web game added by link. */
 "use strict";
 let UI;
-const BUNDLED = [];
+const BUNDLED = [
+];
 const BUILTIN = [
   { id: "blitz", name: "Math Blitz", by: "Built in", color: "#e2361f", letter: "±", text: "60 seconds. How many sums can you get right?", run: mathBlitz },
   { id: "snake", name: "Ember Snake", by: "Built in", color: "#ff7a1a", letter: "~", text: "Arrow keys or WASD. Eat embers, don't bite yourself.", run: emberSnake },

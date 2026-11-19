@@ -13,6 +13,8 @@ create table if not exists public.profiles (
 );
 -- an education (school) account: picked at sign-up, self-declared; it turns on Cesium (db/cesium.sql)
 alter table public.profiles add column if not exists edu boolean not null default false;
+-- the account type picked first at sign-up (db/signup.sql): student, teacher or work. Null for accounts made before types.
+alter table public.profiles add column if not exists kind text check (kind in ('student', 'teacher', 'work'));
 
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$

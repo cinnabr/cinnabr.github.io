@@ -25,7 +25,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; b
 .props .swatches button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line2); cursor: pointer; }
 
 /* a slide is always laid out at 960×540 and scaled */
-.slide { position: absolute; left: 0; top: 0; width: 960px; height: 540px; overflow: hidden; background-size: cover !important; background-position: center !important; font-family: "Canva Sans", system-ui, sans-serif; }
+.slide { position: absolute; left: 0; top: 0; width: 960px; height: 540px; overflow: hidden; background-size: cover !important; background-position: center !important; font-family: "Mercury Sans", system-ui, sans-serif; }
 .el { position: absolute; box-sizing: border-box; }
 .el .txt { width: 100%; height: 100%; outline: none; overflow: hidden; word-wrap: break-word; line-height: 1.2; display: flex; flex-direction: column; }
 .el .txt ul, .el .txt ol { margin: .2em 0; padding-left: 1.2em; }

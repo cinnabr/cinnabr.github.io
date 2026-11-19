@@ -4,12 +4,15 @@ let UI, classes = [], roles = {};
 const KIND = {
   announcement: { icon: "megaphone", name: "Announcement", color: "#e2361f" },
   assignment: { icon: "task", name: "Assignment", color: "#ff7a1a" },
-  material: { icon: "book", name: "Material", color: "#2f7fd8" },
-  question: { icon: "question", name: "Question", color: "#7a4fd1" },
-  game: { icon: "game", name: "Game", color: "#1f9a8a" },
-  quiz: { icon: "form", name: "Quiz", color: "#d6457a" },
+  worksheet: { icon: "grade", name: "Worksheet", color: "#f59e0b" },
+  quiz: { icon: "form", name: "Quiz", color: "#ef4444" },
+  test: { icon: "check", name: "Test", color: "#b91c1c" },
+  game: { icon: "game", name: "Game", color: "#ff5a36" },
+  material: { icon: "book", name: "Material", color: "#d97745" },
+  question: { icon: "question", name: "Question", color: "#f4a83a" },
 };
-const GRADED = ["assignment", "game", "quiz"];
+const FORMISH = ["quiz", "test", "worksheet"];   // built in Forms and marked automatically
+const GRADED = ["assignment", "game", ...FORMISH];
 const GAMES = [["blitz", "Math Blitz"], ["snake", "Ember Snake"], ["type", "Type Sprint"]];   // games.js; their score is the grade, capped at the points
 const q = async p => { const { data, error } = await p; if (error) throw new Error(error.message); return data; };
 const route = () => Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
@@ -19,8 +22,6 @@ async function loadClasses() {
   const mem = await q(sb.from("cr_members").select("class_id,role").eq("user_id", CB_USER.id));
   roles = Object.fromEntries(mem.map(m => [m.class_id, m.role]));
   classes = mem.length ? await q(sb.from("cr_classes").select("*").in("id", mem.map(m => m.class_id)).order("created_at")) : [];
-  // class codes last one day: a teacher's stale code is swapped for today's
-  for (const c of classes) if (roles[c.id] === "teacher" && c.code_at && Date.now() - new Date(c.code_at) > 864e5) { const k = (await sb.rpc("cr_code", { p_class: c.id })).data; if (k) { c.code = k; c.code_at = new Date().toISOString(); } }
 }
 const teacher = c => roles[c] === "teacher";
 const cls = id => classes.find(c => c.id === id);
@@ -66,7 +67,7 @@ async function renderHome() {
 function classTile(c) {
   const t = cbEl("button", { class: "tile", onclick: () => go({ c: c.id }) });
   const ban = cbEl("div", { class: "ban", style: { background: `linear-gradient(135deg, ${c.color}, ${c.color}bb)` } }, cbEl("b", { text: c.name }), cbEl("span", { text: [c.section, c.subject].filter(Boolean).join(" · ") || (teacher(c.id) ? "You teach this class" : "Student") }));
-  t.append(ban, cbEl("div", { class: "body" }, cbEl("span", { text: c.room ? "Room " + c.room : "" }), cbEl("span", { text: teacher(c.id) ? `Today's code ${c.code}` : "" })));
+  t.append(ban, cbEl("div", { class: "body" }, cbEl("span", { text: c.room ? "Room " + c.room : "" }), cbEl("span", { text: teacher(c.id) ? `Class code ${c.code}` : "" })));
   t.append(cbEl("span", { class: "big-ico", text: c.name[0].toUpperCase(), style: { top: "56px", bottom: "auto", background: c.color } }));
   return t;
 }
@@ -82,9 +83,9 @@ async function createClass() {
   } catch (e) { hubErr(e); }
 }
 async function joinClass() {
-  const code = await cbPrompt("Join a class", "", "Today's 4-letter code from your teacher");
+  const code = await cbPrompt("Join a class", "", "The 4-letter code from your teacher");
   if (!code) return;
-  try { const id = await q(sb.rpc("cr_join", { p_code: code })); if (!id) return cbToast("No class has that code today. Codes change every day, so ask your teacher for today's."); await loadClasses(); hubLiveCheck?.(); cbToast("You joined " + (cls(id)?.name || "the class")); go({ c: id }); }
+  try { const id = await q(sb.rpc("cr_join", { p_code: code })); if (!id) return cbToast("No class has that code. Check it with your teacher."); await loadClasses(); hubLiveCheck?.(); cbToast("You joined " + (cls(id)?.name || "the class")); go({ c: id }); }
   catch (e) { hubErr(e); }
 }
 
@@ -92,40 +93,23 @@ async function joinClass() {
 async function renderClass(c, tab) {
   const t = teacher(c.id);
   UI.title.innerHTML = "";
-  UI.title.append(cbEl("span", { class: "crumb", text: "Classroom", onclick: () => go({}) }), cbEl("span", { class: "muted", text: "›" }), cbEl("span", { text: c.name }));
+  UI.title.append(cbEl("span", { class: "crumb", text: "School", onclick: () => go({}) }), cbEl("span", { class: "muted", text: "›" }), cbEl("span", { text: c.name }));
   UI.actions.append(cbEl("button", { class: "icon-btn", title: "Class settings", html: cbIcon("more"), onclick: e => classMenu(e.currentTarget, c) }));
   const v = UI.view = hubView(UI.view);
   const ban = cbEl("div", { class: "cbanner", style: { background: `linear-gradient(120deg, ${c.color}, ${c.color}99 60%, #1a0f0c)` } }, cbEl("h2", { text: c.name }), cbEl("p", { text: [c.section, c.subject, c.room && "Room " + c.room].filter(Boolean).join(" · ") }));
-  if (t) ban.append(cbEl("div", { class: "code", title: "Copy class code", onclick: () => { navigator.clipboard.writeText(c.code).catch(() => 0); cbToast("Class code copied"); } }, cbEl("small", { text: "Today's code" }), cbEl("span", { text: c.code })));
+  if (t) ban.append(cbEl("div", { class: "code", title: "Copy class code", onclick: () => { navigator.clipboard.writeText(c.code).catch(() => 0); cbToast("Class code copied"); } }, cbEl("small", { text: "Class code" }), cbEl("span", { text: c.code })));
   v.append(ban);
-  await liveBar(c, t, v);
+  await liveBar(c, t);
   const tabs = cbEl("div", { class: "tabs" });
   const names = [["stream", "Stream"], ["work", "Classwork"], ["people", "People"], t && ["grades", "Grades"], t && ["attendance", "Attendance"], !t && ["mine", "My grades"]].filter(Boolean);
   for (const [k, n] of names) tabs.append(cbEl("button", { class: k === tab ? "on" : "", text: n, onclick: () => go({ c: c.id, t: k }) }));
-  v.append(tabs);
+  if (!document.querySelector(".hub-school")?.offsetParent) v.append(tabs);   // the sidebar already lists these
   const body = cbEl("div", { class: "anim" }); v.append(body);
   await ({ stream: tabStream, work: tabWork, people: tabPeople, grades: tabGrades, attendance: tabAttendance, mine: tabMine }[tab] || tabStream)(c, body);
 }
-/* Live: the teacher starts a game or quiz and every student in the class is taken straight to it (hub.js hubLive). */
-async function liveBar(c, t, v) {
-  const live = (await sb.from("cr_live").select("*,post:cr_posts(kind,game,form_id)").eq("class_id", c.id).gt("started_at", new Date(Date.now() - HUB_LIVE_MS).toISOString()).maybeSingle()).data;
-  if (t) UI.actions.prepend(live
-    ? cbEl("button", { class: "btn", text: "End live", onclick: async () => { await q(sb.from("cr_live").delete().eq("class_id", c.id)).catch(hubErr); cbToast("Live activity ended"); render(); } })
-    : cbEl("button", { class: "btn primary", text: "Go live", onclick: () => goLive(c) }));
-  if (!live) return;
-  v.append(cbEl("div", { class: "live-bar" }, cbEl("span", { class: "live-dot" }), cbEl("b", { text: "Live now" }), cbEl("span", { class: "grow", text: live.title }),
-    t ? cbEl("span", { class: "muted", text: "Your students were taken to it." }) : cbEl("a", { class: "btn primary", href: hubLiveUrl(live), text: "Join" })));
-}
-async function goLive(c) {
-  const posts = await q(sb.from("cr_posts").select("id,kind,title,game").eq("class_id", c.id).in("kind", ["game", "quiz"]).order("created_at", { ascending: false }));
-  const f = await hubForm("Go live", [{ key: "what", label: "Everyone in the class is taken to", type: "select",
-    options: [...posts.map(p => ["p:" + p.id, `${p.title || KIND[p.kind].name} (${p.kind}, graded)`]), ...GAMES.map(([id, n]) => ["g:" + id, n + " (game, just for fun)"])] }], "Start for the whole class");
-  if (!f) return;
-  const [k, id] = [f.what[0], f.what.slice(2)], p = posts.find(x => x.id === id);
-  try {
-    await q(sb.from("cr_live").upsert({ class_id: c.id, post_id: k === "p" ? id : null, game: k === "g" ? id : null, title: k === "p" ? p.title || KIND[p.kind].name : GAMES.find(g => g[0] === id)[1], started_by: CB_USER.id, started_at: new Date().toISOString() }));
-    cbToast("Live. Your students are being taken to it."); render();
-  } catch (e) { hubErr(e); }
+/* Live games: Make an Activity → Live Play. Students are taken to them from anywhere in Cinnabar (hub.js hubLive). */
+async function liveBar(c, t) {
+  if (t && await hubEdu()) UI.actions.prepend(cbEl("a", { class: "btn primary", href: "play.html#/make", text: "Start a live game" }));
 }
 function classMenu(anchor, c) {
   const t = teacher(c.id);
@@ -134,7 +118,6 @@ function classMenu(anchor, c) {
       const f = await hubForm("Class details", [{ key: "name", label: "Class name", value: c.name, required: true }, { key: "section", label: "Section", value: c.section }, { key: "subject", label: "Subject", value: c.subject }, { key: "room", label: "Room", value: c.room },
         { key: "color", label: "Colour", type: "select", value: c.color, options: HUB_COLORS.map(x => [x, x]) }]);
       if (f) { try { await q(sb.from("cr_classes").update(f).eq("id", c.id)); await loadClasses(); render(); } catch (e) { hubErr(e); } } } },
-    t && { label: "New class code", icon: "restore", run: async () => { try { const k = await q(sb.rpc("cr_new_code", { p_class: c.id })); await loadClasses(); cbToast("New code " + k); render(); } catch (e) { hubErr(e); } } },
     t && { label: c.archived ? "Restore class" : "Archive class", icon: "folder", run: async () => { await q(sb.from("cr_classes").update({ archived: !c.archived }).eq("id", c.id)).catch(hubErr); await loadClasses(); render(); } },
     { label: "Class forum", icon: "forum", run: () => { location.href = "forums.html#class=" + c.id; } },
     { label: "Class calendar", icon: "calendar", run: () => { location.href = "calendar.html"; } },
@@ -155,7 +138,7 @@ async function tabStream(c, body) {
   const upcoming = posts.filter(p => p.kind === "assignment" && p.due_at && new Date(p.due_at) > new Date()).sort((a, b) => a.due_at.localeCompare(b.due_at)).slice(0, 4);
   const side = cbEl("div", { class: "stack" }, cbEl("div", { class: "side-card" }, cbEl("h3", { text: "Upcoming" }),
     upcoming.length ? cbEl("div", { class: "stack" }, ...upcoming.map(p => cbEl("a", { href: "#a=" + p.id, style: { textDecoration: "none" } }, cbEl("b", { text: p.title || "Assignment", style: { display: "block" } }), cbEl("span", { class: "muted", style: { fontSize: "12px" }, text: "Due " + hubWhen(p.due_at) })))) : cbEl("span", { class: "muted", text: "Woohoo, nothing due soon!" })));
-  if (t) side.append(cbEl("div", { class: "side-card" }, cbEl("h3", { text: "Today's class code" }), cbEl("div", { text: c.code, style: { font: "700 30px var(--display)", letterSpacing: ".16em", color: c.color } }), cbEl("div", { class: "muted", style: { fontSize: "12px" }, text: "Changes every day." })));
+  if (t) side.append(cbEl("div", { class: "side-card" }, cbEl("h3", { text: "Class code" }), cbEl("div", { text: c.code, style: { font: "700 30px var(--display)", letterSpacing: ".16em", color: c.color } }), cbEl("div", { class: "muted", style: { fontSize: "12px" }, text: "Changes every day." })));
   const col = cbEl("div", { class: "stack anim" });
   const compose = cbEl("div", { class: "compose" }, hubAvatar(CB_USER.id), cbEl("span", { text: t ? "Announce something to your class" : "Ask your class a question" }));
   await hubPeople([CB_USER.id]); compose.firstChild.replaceWith(hubAvatar(CB_USER.id));
@@ -216,8 +199,8 @@ async function editPost(p) {
 async function tabWork(c, body) {
   const t = teacher(c.id);
   if (t) body.append(cbEl("div", { style: { display: "flex", gap: "8px", marginBottom: "14px", flexWrap: "wrap" } },
-    ...["assignment", "quiz", "game", "material", "question"].map(k => cbEl("button", { class: "btn" + (k === "assignment" ? " primary" : ""), onclick: () => newWork(c, k) }, cbIconEl(KIND[k].icon), cbEl("span", { text: KIND[k].name })))));
-  const posts = await q(sb.from("cr_posts").select("*").eq("class_id", c.id).in("kind", ["assignment", "material", "question", "game", "quiz"]).order("created_at", { ascending: false }));
+    ...["assignment", "worksheet", "quiz", "test", "game", "material", "question"].map(k => cbEl("button", { class: "btn" + (k === "assignment" ? " primary" : ""), onclick: () => newWork(c, k) }, cbIconEl(KIND[k].icon), cbEl("span", { text: KIND[k].name })))));
+  const posts = await q(sb.from("cr_posts").select("*").eq("class_id", c.id).in("kind", ["assignment", "material", "question", "game", ...FORMISH]).order("created_at", { ascending: false }));
   const mine = !t && posts.length ? await q(sb.from("cr_submissions").select("post_id,turned_in,grade,returned_at").eq("student", CB_USER.id).in("post_id", posts.map(p => p.id))) : [];
   const all = t && posts.length ? await q(sb.from("cr_submissions").select("post_id,turned_in,returned_at").in("post_id", posts.map(p => p.id))) : [];
   const size = t && posts.length ? (await q(sb.from("cr_members").select("user_id").eq("class_id", c.id).eq("role", "student"))).length : 0;
@@ -241,7 +224,7 @@ async function tabWork(c, body) {
   }
 }
 async function newWork(c, kind) {
-  if (kind === "game" || kind === "quiz") return newAuto(c, kind);
+  if (kind === "game" || FORMISH.includes(kind)) return newAuto(c, kind);
   const files = await cbFiles.list({ view: "recent" }).catch(() => []);
   const f = await hubForm("New " + KIND[kind].name.toLowerCase(), [
     { key: "title", label: kind === "question" ? "Question" : "Title", required: true },
@@ -264,10 +247,10 @@ async function newWork(c, kind) {
 
 /* a game or a quiz: graded automatically when the student finishes */
 async function newAuto(c, kind) {
-  const forms = kind === "quiz" ? await q(sb.from("fm_forms").select("id,title").eq("owner", CB_USER.id).eq("quiz", true).order("updated_at", { ascending: false })) : [];
-  if (kind === "quiz" && !forms.length) { if (await cbConfirm("Make a quiz first", "Quizzes are built in Forms. Turn on \"Quiz\" and set the correct answers, then come back.", "Open Forms")) location.href = "forms.html"; return; }
-  const f = await hubForm(kind === "game" ? "Assign a game" : "Assign a quiz", [
-    kind === "game" ? { key: "game", label: "Game", type: "select", options: GAMES } : { key: "form_id", label: "Quiz (from your Forms)", type: "select", options: forms.map(x => [x.id, x.title]) },
+  const forms = FORMISH.includes(kind) ? await q(sb.from("fm_forms").select("id,title").eq("owner", CB_USER.id).eq("quiz", true).order("updated_at", { ascending: false })) : [];
+  if (FORMISH.includes(kind) && !forms.length) { if (await cbConfirm("Make it in Forms first", KIND[kind].name + "s are built in Forms. Turn on \"Quiz\" and set the correct answers, then come back.", "Open Forms")) location.href = "forms.html"; return; }
+  const f = await hubForm(kind === "game" ? "Assign a game" : "Assign a " + KIND[kind].name.toLowerCase(), [
+    kind === "game" ? { key: "game", label: "Game", type: "select", options: GAMES } : { key: "form_id", label: KIND[kind].name + " (from your Forms)", type: "select", options: forms.map(x => [x.id, x.title]) },
     { key: "title", label: "Title", value: kind === "game" ? "Math Blitz" : forms[0].title, required: true },
     { key: "body", label: "Instructions (optional)", type: "textarea", rows: 3 },
     { key: "topic", label: "Topic (optional)" },
@@ -277,7 +260,7 @@ async function newAuto(c, kind) {
   if (!f) return;
   Object.assign(f, { class_id: c.id, kind, body: f.body || "", due_at: hubISO(f.due_at), points: f.points == null ? null : Number(f.points) });
   try {
-    if (kind === "quiz") await q(sb.from("fm_forms").update({ class_id: c.id }).eq("id", f.form_id));   // only this class may answer it
+    if (FORMISH.includes(kind)) await q(sb.from("fm_forms").update({ class_id: c.id }).eq("id", f.form_id));   // only this class may answer it
     const p = await q(sb.from("cr_posts").insert(f).select().single());
     if (p.due_at) await q(sb.from("cal_events").insert({ class_id: c.id, title: "Due: " + p.title, starts_at: p.due_at, color: c.color, notes: "classroom:" + p.id })).catch(() => 0);
     go({ a: p.id });
@@ -307,7 +290,7 @@ async function renderPost(id) {
   v.append(grid);
   if (p.kind === "material") right.append(cbEl("div", { class: "side-card" }, cbEl("h3", { text: "Material" }), cbEl("span", { class: "muted", text: "Nothing to hand in." })));
   else if (t) await teacherPanel(p, c, right);
-  else if (p.kind === "game" || p.kind === "quiz") await autoPanel(p, c, right);
+  else if (p.kind === "game" || FORMISH.includes(p.kind)) await autoPanel(p, c, right);
   else await studentPanel(p, c, right);
 }
 async function openFile(e, fileId) {
@@ -352,11 +335,11 @@ async function autoPanel(p, c, right) {
   const s = (await q(sb.from("cr_submissions").select("*").eq("post_id", p.id).eq("student", CB_USER.id)))[0];
   const game = p.kind === "game", late = p.due_at && new Date(p.due_at) < new Date();
   const card = cbEl("div", { class: "side-card" }, cbEl("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-    cbEl("h3", { text: game ? "Play" : "Quiz", style: { margin: 0 } }), cbEl("span", { class: "chip " + (s?.grade != null ? "green" : late ? "red" : "amber"), text: s?.grade != null ? "Done" : late ? "Missing" : "Assigned" })));
+    cbEl("h3", { text: game ? "Play" : KIND[p.kind].name, style: { margin: 0 } }), cbEl("span", { class: "chip " + (s?.grade != null ? "green" : late ? "red" : "amber"), text: s?.grade != null ? "Done" : late ? "Missing" : "Assigned" })));
   if (s?.grade != null) card.append(cbEl("div", { text: `${s.grade}${p.points ? " / " + p.points : ""}`, style: { font: "700 34px var(--display)", color: c.color, margin: "8px 0" } }), cbEl("div", { class: "muted", text: game ? "Your best score counts. Play again to beat it." : "Your best attempt counts." }));
-  else card.append(cbEl("p", { class: "muted", text: game ? `Score ${p.points || 100} or more for full marks.` : "Your score is filled in when you hand in the quiz." }));
+  else card.append(cbEl("p", { class: "muted", text: game ? `Score ${p.points || 100} or more for full marks.` : `Your score is filled in when you hand in the ${KIND[p.kind].name.toLowerCase()}.` }));
   const back = encodeURIComponent(location.href);
-  card.append(cbEl("a", { class: "btn primary", style: { width: "100%", marginTop: "12px", height: "40px", justifyContent: "center" }, text: game ? (s ? "Play again" : "Play") : (s ? "Open the quiz" : "Start the quiz"),
+  card.append(cbEl("a", { class: "btn primary", style: { width: "100%", marginTop: "12px", height: "40px", justifyContent: "center" }, text: game ? (s ? "Play again" : "Play") : (s ? "Open the " : "Start the ") + KIND[p.kind].name.toLowerCase(),
     href: game ? `games.html#play=${p.game}&post=${p.id}&back=${back}` : `forms.html#f=${p.form_id}&post=${p.id}&back=${back}` }));
   right.append(card);
 }
@@ -541,7 +524,7 @@ async function tabMine(c, body) {
 (async () => {
   UI = await hubBoot("Classroom");
   await loadClasses().catch(e => hubErr(new Error(/cr_members|relation|schema cache/.test(e.message) ? "Classroom isn't set up on this Cinnabar server yet (db/classroom.sql)." : e.message)));
-  addEventListener("hashchange", render);
+  addEventListener("hashchange", async () => { render(); const s = document.querySelector(".hub-school"); if (s) s.replaceWith(await hubSchool((await hubKind()) === "teacher")); });
   render();
   // live stream: refresh when someone posts or comments in a class I'm viewing
   sb.channel("classroom").on("postgres_changes", { event: "INSERT", schema: "public", table: "cr_posts" }, ev => { if (route().c === ev.new.class_id && ev.new.author !== CB_USER.id) render(); }).subscribe();

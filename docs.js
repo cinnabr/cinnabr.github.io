@@ -28,7 +28,7 @@ const colorBtn = (icon, title, cmd, def) => {
   wrap.append(bar, inp); return wrap;
 };
 const styleSel = sel("style", "Paragraph style", [["p", "Normal text"], ["h1", "Title"], ["h2", "Heading 1"], ["h3", "Heading 2"], ["blockquote", "Quote"], ["pre", "Code"]], v => exec("formatBlock", v));
-const fontSel = sel("font", "Font", [["", "Font"], ["Noto Sans, Arial, sans-serif", "Sans"], ["Georgia, 'Noto Serif', serif", "Serif"], ["ui-monospace, monospace", "Mono"], ["'Canva Sans'", "Canva Sans"], ["Arial", "Arial"], ["'Times New Roman', serif", "Times"], ["Verdana", "Verdana"], ["'Comic Neue', 'Comic Sans MS', cursive", "Comic"]], v => v && exec("fontName", v));
+const fontSel = sel("font", "Font", [["", "Font"], ["Noto Sans, Arial, sans-serif", "Sans"], ["Georgia, 'Noto Serif', serif", "Serif"], ["ui-monospace, monospace", "Mono"], ["'Mercury Sans'", "Mercury Sans"], ["Arial", "Arial"], ["'Times New Roman', serif", "Times"], ["Verdana", "Verdana"], ["'Comic Neue', 'Comic Sans MS', cursive", "Comic"]], v => v && exec("fontName", v));
 const sizeSel = sel("size", "Font size", [["", "Size"], ...[9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64].map(n => [n, n])], v => {
   if (!v) return;
   document.execCommand("styleWithCSS", false, false);

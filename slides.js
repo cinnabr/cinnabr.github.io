@@ -13,7 +13,7 @@ const THEMES = {
   "Slate": { bg: "#14181c", title: "#eef2f5", body: "#aab6c0", accent: "#ff7a1a" },
 };
 const SWATCHES = ["#0b0807", "#1d1513", "#3a0d06", "#e2361f", "#ff7a1a", "#f4a83a", "#fbf7f4", "#ffffff", "#14181c", "#24343f"];
-const FONTS = { sans: '"Canva Sans", system-ui, sans-serif', serif: "Georgia, 'Noto Serif', serif", mono: "ui-monospace, monospace", display: '"Canva Sans", system-ui, sans-serif' };
+const FONTS = { sans: '"Mercury Sans", system-ui, sans-serif', serif: "Georgia, 'Noto Serif', serif", mono: "ui-monospace, monospace", display: '"Mercury Sans", system-ui, sans-serif' };
 
 const theme = () => THEMES[deck.theme] || THEMES.Cinnabar;
 function layout(kind) {
@@ -258,7 +258,7 @@ function renderProps() {
     const st = (el.st ||= {});
     p.append(cbEl("h3", { text: "Text", style: { marginTop: "16px" } }));
     p.append(row("Size", num(st.size || 24, v => (st.size = Math.max(6, Math.min(400, v))))), row("Colour", col(st.color, v => (st.color = v))));
-    const fs = cbEl("select", { class: "field" }); [["sans", "Canva Sans"], ["serif", "Serif"], ["mono", "Mono"]].forEach(([v, t]) => fs.append(cbEl("option", { value: v, text: t }))); fs.value = st.font === "display" ? "sans" : st.font || "sans";
+    const fs = cbEl("select", { class: "field" }); [["sans", "Mercury Sans"], ["serif", "Serif"], ["mono", "Mono"]].forEach(([v, t]) => fs.append(cbEl("option", { value: v, text: t }))); fs.value = st.font === "display" ? "sans" : st.font || "sans";
     fs.onchange = () => { snap(); st.font = fs.value; changed(false); }; p.append(row("Font", fs));
     const tog = (label, key, val = 1) => cbEl("button", { class: "btn" + (st[key] === val || (val === 1 && st[key]) ? " primary" : ""), text: label, onclick: () => { snap(); st[key] = st[key] === val ? 0 : val; changed(false); } });
     p.append(cbEl("div", { class: "btns" }, tog("B", "bold"), tog("I", "italic"), tog("U", "underline")));

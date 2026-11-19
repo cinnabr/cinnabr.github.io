@@ -151,7 +151,12 @@ function render() {
 (async function main() {
   cbWave();
   await cbRequireAuth("Drive");
-  sb.from("profiles").select("kind").eq("id", CB_USER.id).maybeSingle().then(r => { if (r.data?.kind === "work") document.querySelectorAll('a[href="classroom.html"], a[href="games.html"]').forEach(a => a.remove()); }, () => 0);   // work accounts have no Classroom
+  document.querySelectorAll('.apps a[href="classroom.html"], .apps a[href="play.html"]').forEach(a => a.remove());
+  sb.from("profiles").select("kind,edu").eq("id", CB_USER.id).maybeSingle().then(async r => {
+    const kind = r.data?.kind;
+    if (kind === "work") { $(".apps a[href='games.html']")?.remove(); return; }
+    if (r.data?.edu || kind === "student" || kind === "teacher") $("#new").after(await hubSchool(kind === "teacher"));
+  }, () => 0);
   $("#shell").hidden = false;
   $("#brand").append(cbLogo());
   $("#new .plus").innerHTML = cbIcon("plus");
@@ -166,7 +171,7 @@ function render() {
   lb.onclick = () => { layout = layout === "grid" ? "list" : "grid"; localStorage.setItem("cb-layout", layout); setLayoutIcon(); render(); };
   const me = $("#me");
   me.textContent = cbName()[0]; me.title = cbUname(CB_USER.email); me.style.background = cbColorFor(CB_USER.email);
-  me.onclick = e => cbMenuAt(e.currentTarget, [{ label: cbUname(CB_USER.email), icon: "shared", run() {} }, "-", { label: "Sign out", icon: "logout", run: cbSignOut }]);
+  cbAccountMenu(me);
   const starts = $("#starts");
   for (const t of TEMPLATES) {
     const b = cbEl("button", { class: "tpl", onclick: () => openNew(t.kind, t) });

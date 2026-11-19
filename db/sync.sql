@@ -23,4 +23,4 @@ drop policy if exists "own sync" on public.sync_items;
 create policy "own sync" on public.sync_items for all to authenticated using (owner = auth.uid()) with check (owner = auth.uid());
 grant select, insert, update, delete on public.sync_devices, public.sync_items to authenticated;
 revoke all on public.sync_devices, public.sync_items from anon;
-alter publication supabase_realtime add table public.sync_items;
+do $$ begin alter publication supabase_realtime add table public.sync_items; exception when duplicate_object then null; end $$;

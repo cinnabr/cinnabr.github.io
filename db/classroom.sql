@@ -270,7 +270,7 @@ end $$;
 
 -- ── v2: games and quizzes as classwork, student IDs, teacher grade entry (Skyward import/export) ──
 alter table public.cr_posts drop constraint if exists cr_posts_kind_check;
-alter table public.cr_posts add constraint cr_posts_kind_check check (kind in ('announcement', 'assignment', 'material', 'question', 'game', 'quiz'));
+alter table public.cr_posts add constraint cr_posts_kind_check check (kind in ('announcement', 'assignment', 'material', 'question', 'game', 'quiz', 'test', 'worksheet'));
 alter table public.cr_posts add column if not exists game text check (game is null or game ~ '^[a-z0-9-]{1,32}$');
 alter table public.cr_posts add column if not exists form_id uuid;   -- the quiz's form; forms.sql adds the foreign key
 alter table public.cr_members add column if not exists student_number text check (student_number is null or length(student_number) <= 32);
@@ -301,7 +301,7 @@ declare p cr_posts; s numeric; m numeric;
 begin
   select * into p from cr_posts where id = p_post;
   if p.id is null or not cr_is_member(p.class_id) or cr_is_teacher(p.class_id) then raise exception 'Only students in this class can do that' using errcode = '42501'; end if;
-  if p.kind = 'quiz' then
+  if p.kind in ('quiz', 'test', 'worksheet') then
     select max(score), max(max_score) into s, m from fm_responses where form_id = p.form_id and respondent = auth.uid();
     if s is null then raise exception 'Take the quiz first'; end if;
     s := case when coalesce(m, 0) > 0 and p.points is not null then round(s / m * p.points, 1) else s end;
@@ -396,27 +396,8 @@ end $$;
 grant execute on function public.cr_code(uuid) to authenticated;
 revoke execute on function public.cr_code(uuid), public.cr_gen_code() from anon, public;
 
--- One live activity per class. While it's on, every student in the class is taken to it.
-create table if not exists public.cr_live (
-  class_id uuid primary key references public.cr_classes(id) on delete cascade,
-  post_id uuid references public.cr_posts(id) on delete cascade,   -- a game or quiz from classwork (graded), or
-  game text check (game is null or game ~ '^[a-z0-9-]{1,32}$'),     -- just a game (not graded)
-  title text not null check (length(title) between 1 and 120),
-  started_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  started_at timestamptz not null default now(),
-  check (post_id is not null or game is not null)
-);
-alter table public.cr_live enable row level security;
-drop policy if exists "members see live" on public.cr_live;
-drop policy if exists "teachers start live" on public.cr_live;
-drop policy if exists "teachers change live" on public.cr_live;
-drop policy if exists "teachers end live" on public.cr_live;
-create policy "members see live" on public.cr_live for select to authenticated using (cr_is_member(class_id));
-create policy "teachers start live" on public.cr_live for insert to authenticated with check (cr_is_teacher(class_id) and started_by = auth.uid() and (post_id is null or cr_post_class(post_id) = class_id));
-create policy "teachers change live" on public.cr_live for update to authenticated using (cr_is_teacher(class_id)) with check (cr_is_teacher(class_id) and started_by = auth.uid() and (post_id is null or cr_post_class(post_id) = class_id));
-create policy "teachers end live" on public.cr_live for delete to authenticated using (cr_is_teacher(class_id));
-grant select, insert, update, delete on public.cr_live to authenticated;
-do $$ begin begin alter publication supabase_realtime add table public.cr_live; exception when others then null; end; end $$;
+-- Live games are Cesium's (ce_live_sessions); the earlier cr_live table is removed.
+drop table if exists public.cr_live;
 
 -- Only teacher accounts (and accounts from before types existed) create classes; work accounts don't join them.
 drop policy if exists "anyone signed in creates a class" on public.cr_classes;
@@ -431,3 +412,124 @@ begin
 end $$;
 drop trigger if exists cr_no_work on public.cr_members;
 create trigger cr_no_work before insert or update on public.cr_members for each row execute function public.cr_no_work();
+
+-- a student leaving full screen during a quiz or test: shown to the class's teachers straight away
+create table if not exists public.cr_alerts (
+  id bigint generated always as identity primary key,
+  post_id uuid not null references public.cr_posts(id) on delete cascade,
+  student uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  what text not null check (length(what) <= 60),
+  at timestamptz not null default now()
+);
+create index if not exists cr_alerts_post_idx on public.cr_alerts(post_id, at desc);
+alter table public.cr_alerts enable row level security;
+drop policy if exists "student reports self" on public.cr_alerts;
+drop policy if exists "teachers see alerts" on public.cr_alerts;
+create policy "student reports self" on public.cr_alerts for insert to authenticated with check (
+  student = auth.uid() and exists (select 1 from cr_posts p where p.id = post_id and cr_is_member(p.class_id) and not cr_is_teacher(p.class_id)));
+create policy "teachers see alerts" on public.cr_alerts for select to authenticated using (exists (select 1 from cr_posts p where p.id = post_id and cr_is_teacher(p.class_id)));
+grant select, insert on public.cr_alerts to authenticated;
+
+-- ── v4: class codes walk a shuffled order of all 32^4 codes; codes are only reissued once every code has been used ──
+create table if not exists public.cr_code_state (one boolean primary key default true check (one), epoch int not null default 0, next bigint not null default 0,
+  a bigint not null, b bigint not null, c bigint not null);
+alter table public.cr_code_state enable row level security;
+revoke all on public.cr_code_state from anon, authenticated;
+insert into public.cr_code_state (a, b, c) values (1 + 2 * floor(random() * 524288)::bigint, floor(random() * 1048576)::bigint, 1 + 2 * floor(random() * 524288)::bigint) on conflict do nothing;
+-- bijection on 0..2^20-1: odd multiply, xor, odd multiply (all mod 2^20)
+create or replace function public.cr_code_of(i bigint, a bigint, b bigint, c bigint) returns text language sql immutable set search_path = public as $$
+  select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 1 + ((x >> (5 * (3 - k))) & 31)::int, 1), '' order by k)
+  from (select (((((i * a) & 1048575) # b) * c) & 1048575) as x) v, generate_series(0, 3) k
+$$;
+create or replace function public.cr_gen_code() returns text language plpgsql volatile security definer set search_path = public as $$
+declare s cr_code_state; k text; r record; n bigint := 0;
+begin
+  select * into s from cr_code_state where one for update;
+  loop
+    if s.next >= 1048576 then   -- every code used: reshuffle and reissue all of them
+      if (select count(*) from cr_classes) >= 1048576 then raise exception 'No class codes left' using errcode = '53400'; end if;
+      update cr_code_state set epoch = epoch + 1, next = 0, a = 1 + 2 * floor(random() * 524288)::bigint, b = floor(random() * 1048576)::bigint,
+        c = 1 + 2 * floor(random() * 524288)::bigint where one returning * into s;
+      update cr_classes set code = 'X' || id::text;
+      for r in select id from cr_classes order by created_at loop
+        update cr_classes set code = cr_code_of(n, s.a, s.b, s.c), code_at = now() where id = r.id; n := n + 1;
+      end loop;
+      update cr_code_state set next = n where one returning * into s;
+    end if;
+    k := cr_code_of(s.next, s.a, s.b, s.c);
+    update cr_code_state set next = next + 1 where one returning * into s;
+    exit when not exists (select 1 from cr_classes where code = k);
+  end loop;
+  return k;
+end $$;
+revoke execute on function public.cr_gen_code(), public.cr_code_of(bigint, bigint, bigint, bigint) from anon, authenticated, public;
+alter table public.cr_classes alter column code drop default;
+create or replace function public.cr_class_code() returns trigger language plpgsql security definer set search_path = public as $$
+begin new.code := cr_gen_code(); new.code_at := now(); return new; end $$;
+drop trigger if exists cr_class_code on public.cr_classes;
+create trigger cr_class_code before insert on public.cr_classes for each row execute function public.cr_class_code();
+create or replace function public.cr_join(p_code text) returns uuid language plpgsql security definer set search_path = public as $$
+declare c uuid; tries int;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  insert into cr_join_tries as t (uid, hour, n) values (auth.uid(), date_trunc('hour', now()), 1)
+    on conflict (uid, hour) do update set n = t.n + 1 returning n into tries;
+  if tries > 20 then raise exception 'Too many tries. Wait an hour, then check the code with your teacher.' using errcode = '53400'; end if;
+  select id into c from cr_classes where code = upper(trim(p_code)) and not archived;
+  if c is null then return null; end if;
+  insert into cr_members(class_id, user_id, role) values (c, auth.uid(), 'student') on conflict do nothing;
+  delete from cr_join_tries where uid = auth.uid();
+  return c;
+end $$;
+create or replace function public.cr_code(p_class uuid) returns text language plpgsql security definer set search_path = public as $$
+begin
+  if not cr_is_teacher(p_class) then raise exception 'Only teachers can do that' using errcode = '42501'; end if;
+  return (select code from cr_classes where id = p_class);
+end $$;
+
+-- ── v4: each class has its game class (ce_classes) for live games, made and kept in step from here ──
+alter table public.cr_classes add column if not exists play_class uuid;
+create or replace function public.cr_play_member(p_play uuid, p_user uuid, p_role text) returns void language plpgsql security definer set search_path = public as $$
+begin
+  update profiles set edu = true where id = p_user and edu is not true;
+  if not exists (select 1 from ce_profiles where id = p_user) then
+    insert into ce_profiles (id, role, display_name, coins)
+      select p_user, p_role, left(coalesce(nullif(display_name, ''), split_part(email, '@', 1)), 40), case when p_role = 'student' then 100 else 0 end from profiles where id = p_user;
+    if p_role = 'student' then insert into ce_coin_ledger (user_id, delta, reason) values (p_user, 100, 'welcome_bonus'); end if;
+  end if;
+  if p_role = 'student' and (select role from ce_profiles where id = p_user) = 'student' then
+    insert into ce_class_members (class_id, user_id) values (p_play, p_user) on conflict do nothing;
+  end if;
+end $$;
+create or replace function public.cr_play_sync(p_class uuid) returns uuid language plpgsql security definer set search_path = public as $$
+declare c cr_classes; y int; d date; m record;
+begin
+  if not cr_is_member(p_class) then raise exception 'Not in that class' using errcode = '42501'; end if;
+  if to_regclass('public.ce_classes') is null then return null; end if;
+  select * into c from cr_classes where id = p_class for update;
+  if c.play_class is null or not exists (select 1 from ce_classes where id = c.play_class) then
+    perform cr_play_member(null, c.owner, 'teacher');
+    insert into ce_classes (teacher_id, name, period, code, color, theme)
+      values (c.owner, left(c.name, 60), coalesce(c.section, ''), ce_generate_class_code(), c.color, 'atom') returning id into c.play_class;
+    insert into ce_grade_categories (class_id, name, weight, position) values (c.play_class, 'Daily Work', 30, 0), (c.play_class, 'Practice', 20, 1), (c.play_class, 'Quizzes', 20, 2), (c.play_class, 'Tests', 30, 3);
+    y := extract(year from now())::int - case when extract(month from now()) < 7 then 1 else 0 end; d := make_date(y, 8, 1);
+    insert into ce_grading_periods (class_id, name, starts_on, ends_on, position) values (c.play_class, 'Q1', d, make_date(y, 10, 15), 0),
+      (c.play_class, 'Q2', make_date(y, 10, 16), make_date(y, 12, 31), 1), (c.play_class, 'Q3', make_date(y + 1, 1, 1), make_date(y + 1, 3, 15), 2), (c.play_class, 'Q4', make_date(y + 1, 3, 16), make_date(y + 1, 6, 30), 3);
+    update cr_classes set play_class = c.play_class where id = p_class;
+  end if;
+  update ce_classes set name = left(c.name, 60), color = c.color where id = c.play_class and (name <> left(c.name, 60) or color <> c.color);
+  for m in select user_id, role from cr_members where class_id = p_class loop perform cr_play_member(c.play_class, m.user_id, m.role); end loop;
+  return c.play_class;
+end $$;
+grant execute on function public.cr_play_sync(uuid) to authenticated;
+revoke execute on function public.cr_play_sync(uuid), public.cr_play_member(uuid, uuid, text) from anon, public;
+revoke execute on function public.cr_play_member(uuid, uuid, text) from authenticated;
+create or replace function public.cr_play_join() returns trigger language plpgsql security definer set search_path = public as $$
+declare p uuid := (select play_class from cr_classes where id = new.class_id);
+begin
+  if p is not null and to_regclass('public.ce_classes') is not null then perform cr_play_member(p, new.user_id, new.role); end if;
+  return new;
+end $$;
+drop trigger if exists cr_play_join on public.cr_members;
+create trigger cr_play_join after insert on public.cr_members for each row execute function public.cr_play_join();
+revoke execute on function public.cr_new_code(uuid) from anon, authenticated, public;

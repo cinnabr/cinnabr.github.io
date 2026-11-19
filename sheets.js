@@ -463,7 +463,7 @@ function chart() {
   const draw = type => {
     const W = 640, H = 340, L = 54, B = 46, T = 20, R = 16, all = series.flatMap(s => s.vals), max = Math.max(0, ...all), min = Math.min(0, ...all), span = max - min || 1;
     const y = v => T + (H - T - B) * (1 - (v - min) / span), x0 = L, w = W - L - R, step = w / labels.length;
-    let g = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="Canva Sans, sans-serif" font-size="11">`;
+    let g = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="Mercury Sans, sans-serif" font-size="11">`;
     for (let k = 0; k <= 4; k++) { const v = min + span * k / 4, yy = y(v); g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#2a201d"/><text x="${L - 8}" y="${yy + 4}" fill="#a09390" text-anchor="end">${cbEsc(FX.format(+v.toPrecision(3)))}</text>`; }
     labels.forEach((l, i) => { g += `<text x="${x0 + step * (i + .5)}" y="${H - B + 18}" fill="#a09390" text-anchor="middle">${cbEsc(l.slice(0, 12))}</text>`; });
     series.forEach((s, si) => {
